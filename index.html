@@ -1,0 +1,155 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My AI Waste Assistant</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    text-align: center;
+    background: #eef8f0;
+    padding: 20px;
+  }
+  main {
+    max-width: 480px;
+    margin: auto;
+    background: white;
+    padding: 22px;
+    border-radius: 18px;
+  }
+  button, input {
+    margin: 10px;
+    padding: 12px;
+    max-width: 95%;
+  }
+  button {
+    background: #187647;
+    color: white;
+    border: 0;
+    border-radius: 10px;
+    font-size: 16px;
+  }
+  img {
+    max-width: 95%;
+    max-height: 280px;
+    margin-top: 12px;
+  }
+  #result {
+    font-size: 21px;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>♻️ AI Waste Assistant</h1>
+  <p>Choose a waste photo and let your trained AI classify it.</p>
+
+  <input id="photo" type="file" accept="image/*" capture="environment">
+  <br>
+  <img id="preview" alt="Your selected waste" hidden>
+  <p id="status">Loading your AI model...</p>
+  <p id="result">Ready when you are!</p>
+  <button id="speak" disabled>🔊 Speak Result</button>
+</main>
+
+<script>
+const MODEL_URL = "PASTE_YOUR_MODEL_URL_HERE";
+
+let model;
+let lastMessage = "";
+
+async function start() {
+  try {
+    const url = MODEL_URL.trim().replace(/\/?$/, "/");
+    if (url === "PASTE_YOUR_MODEL_URL_HERE/") {
+      throw new Error("Paste your model URL into the code first.");
+    }
+    model = await tmImage.load(
+      url + "model.json",
+      url + "metadata.json"
+    );
+    document.getElementById("status").textContent =
+      "AI ready! Choose a photo.";
+  } catch (error) {
+    document.getElementById("status").textContent =
+      "Could not load the model. Check your model URL and internet.";
+    console.error(error);
+  }
+}
+
+document.getElementById("photo").addEventListener("change",
+  async function(event) {
+    if (!model || !event.target.files.length) return;
+
+    const file = event.target.files[0];
+    const image = document.getElementById("preview");
+    const result = document.getElementById("result");
+    const status = document.getElementById("status");
+
+    status.textContent = "AI is analysing the picture...";
+    result.textContent = "";
+    document.getElementById("speak").disabled = true;
+
+    const objectURL = URL.createObjectURL(file);
+    image.onload = async () => {
+      try {
+        image.hidden = false;
+        const predictions = await model.predict(image);
+        predictions.sort((a, b) => b.probability - a.probability);
+
+        const best = predictions[0];
+        const label = best.className;
+        const confidence = Math.round(best.probability * 100);
+
+        if (best.probability < 0.65) {
+          lastMessage =
+            "I'm not confident about this object. Please check it manually.";
+        } else {
+          lastMessage =
+            "This waste looks like " + label +
+            ". Please put it in the " + label + " bin.";
+        }
+
+        result.textContent = lastMessage;
+        status.textContent =
+          "Top prediction: " + label + " (" + confidence + "%)";
+
+        document.getElementById("speak").disabled = false;
+      } catch (error) {
+        status.textContent = "Prediction failed. Please try another photo.";
+        console.error(error);
+      } finally {
+        URL.revokeObjectURL(objectURL);
+      }
+    };
+
+    image.onerror = () => {
+      status.textContent = "Could not open that image. Try another.";
+      URL.revokeObjectURL(objectURL);
+    };
+
+    image.src = objectURL;
+  }
+);
+
+document.getElementById("speak").addEventListener("click", () => {
+  if (!lastMessage || !("speechSynthesis" in window)) {
+    alert("Speech is not supported in this browser.");
+    return;
+  }
+  speechSynthesis.cancel();
+  const speech = new SpeechSynthesisUtterance(lastMessage);
+  speech.lang = "en-IN";
+  speech.rate = 0.9;
+  speechSynthesis.speak(speech);
+});
+
+start();
+</script>
+</body>
+</html>
